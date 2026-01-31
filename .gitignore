@@ -1,0 +1,36 @@
+# --- GÜVENLİK VE VERİTABANI ---
+.env
+*.db
+chatbot.db
+users.db
+sql_app.db
+.env.local
+
+# --- PYTHON / BACKEND (Senin yapına göre) ---
+venv/
+Include/
+Lib/
+Scripts/
+pyvenv.cfg
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+model_kontrol.py
+
+# --- NEXT.JS / FRONTEND (is-plani-frontend klasörü için) ---
+is-plani-frontend/.next/
+is-plani-frontend/node_modules/
+is-plani-frontend/out/
+is-plani-frontend/.vercel
+node_modules/
+
+# --- ÜRETİLEN PDF DOSYALARI ---
+pdfs/
+*.pdf
+StartERA_Plan.pdf
+
+# --- SİSTEM DOSYALARI ---
+.DS_Store
+Thumbs.db
+*.pkl
