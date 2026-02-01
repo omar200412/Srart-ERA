@@ -1,6 +1,8 @@
 import os
 import sqlite3
 import hashlib
+import psycopg2
+from psycopg2.extras import RealDictCursor
 import google.generativeai as genai
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -11,64 +13,102 @@ from dotenv import load_dotenv
 # PDF Kütüphaneleri
 from reportlab.lib.pagesizes import letter
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.pdfbase import pdfmetrics
-from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.lib.styles import getSampleStyleSheet
 
 # .env dosyasını yükle
 load_dotenv()
 
 api_key = os.getenv("GOOGLE_API_KEY")
-if not api_key:
-    print("UYARI: .env dosyası bulunamadı veya içi boş! Lütfen oluşturun.")
+DATABASE_URL = os.getenv("DATABASE_URL") # Render'dan gelecek URL
 
-# --- MODEL AYARI (GEMINI 2.5 FLASH - Hızlı ve Ücretsiz) ---
+# --- MODEL AYARI ---
 try:
     if api_key:
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel("gemini-2.5-flash") 
-        print("✅ Gemini 2.5 FLASH Modeli Başarıyla Yüklendi!")
+        model = genai.GenerativeModel("gemini-2.0-flash") # En güncel ve hızlı model
+        print("✅ Gemini 2.0 FLASH Modeli Hazır!")
 except Exception as e:
     print(f"Model Hatası: {e}")
 
 app = FastAPI()
 
-# CORS İzinleri (Frontend bağlantısı için)
+# CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # Güvenlik için canlıda kendi domainini yaz
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# --- VERİTABANI KURULUMU ---
+# --- VERİTABANI BAĞLANTISI (AKILLI GEÇİŞ) ---
+def get_db_connection():
+    """PostgreSQL varsa ona, yoksa SQLite'a bağlanır."""
+    if DATABASE_URL:
+        try:
+            conn = psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
+            return conn
+        except Exception as e:
+            print(f"PostgreSQL Bağlantı Hatası: {e}")
+            return None
+    else:
+        # Lokal geliştirme için SQLite
+        conn = sqlite3.connect("chatbot.db")
+        conn.row_factory = sqlite3.Row
+        return conn
+
+# --- TABLO OLUŞTURMA ---
 def init_db():
-    conn = sqlite3.connect("chatbot.db")
+    conn = get_db_connection()
+    if not conn:
+        print("Veritabanı bağlantısı kurulamadı!")
+        return
+    
     cursor = conn.cursor()
-    # Kullanıcılar
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            email TEXT UNIQUE,
-            password TEXT
-        )
-    """)
-    # Chat Geçmişi
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS chat_history (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            role TEXT,
-            message TEXT,
-            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
+    
+    # PostgreSQL ve SQLite için uyumlu tablo oluşturma sorguları
+    if DATABASE_URL:
+        # PostgreSQL
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id SERIAL PRIMARY KEY,
+                email TEXT UNIQUE NOT NULL,
+                password TEXT NOT NULL
+            );
+        """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS chat_history (
+                id SERIAL PRIMARY KEY,
+                role TEXT,
+                message TEXT,
+                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+    else:
+        # SQLite
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                email TEXT UNIQUE,
+                password TEXT
+            );
+        """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS chat_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                role TEXT,
+                message TEXT,
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+
     conn.commit()
     conn.close()
+    print("✅ Veritabanı tabloları kontrol edildi.")
 
 init_db()
 
-# --- VERİ MODELLERİ ---
+# --- MODELLER ---
 class UserAuth(BaseModel):
     email: str
     password: str
@@ -81,63 +121,75 @@ class ChatRequest(BaseModel):
     message: str
     language: str = "tr"
 
-# --- 1. LOGIN & REGISTER ---
+# --- HELPER: SQL PLACEHOLDER ---
+def get_placeholder():
+    """Postgres için %s, SQLite için ? döndürür"""
+    return "%s" if DATABASE_URL else "?"
+
+# --- ENDPOINTS ---
+
 @app.post("/register")
 def register(user: UserAuth):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    hashed_pw = hashlib.sha256(user.password.encode()).hexdigest()
+    
+    ph = get_placeholder() # %s veya ?
+    query = f"INSERT INTO users (email, password) VALUES ({ph}, {ph})"
+    
     try:
-        conn = sqlite3.connect("chatbot.db")
-        cursor = conn.cursor()
-        hashed_pw = hashlib.sha256(user.password.encode()).hexdigest()
-        cursor.execute("INSERT INTO users (email, password) VALUES (?, ?)", (user.email, hashed_pw))
+        cursor.execute(query, (user.email, hashed_pw))
         conn.commit()
-        conn.close()
         return {"message": "Kayıt Başarılı"}
-    except sqlite3.IntegrityError:
+    except Exception as e: # IntegrityError genelleştirildi
+        conn.rollback()
         raise HTTPException(status_code=400, detail="Bu e-posta zaten kullanılıyor.")
+    finally:
+        conn.close()
 
 @app.post("/login")
 def login(user: UserAuth):
-    conn = sqlite3.connect("chatbot.db")
+    conn = get_db_connection()
     cursor = conn.cursor()
     hashed_pw = hashlib.sha256(user.password.encode()).hexdigest()
-    cursor.execute("SELECT * FROM users WHERE email=? AND password=?", (user.email, hashed_pw))
+    
+    ph = get_placeholder()
+    query = f"SELECT * FROM users WHERE email={ph} AND password={ph}"
+    
+    cursor.execute(query, (user.email, hashed_pw))
     user_data = cursor.fetchone()
     conn.close()
     
     if user_data:
-        # Basit bir token simülasyonu
+        # PostgreSQL RealDictCursor sözlük döner, SQLite Row nesnesi döner (ikisi de erişilebilir)
         return {"token": f"user-token-{user.email}", "message": "Giriş Başarılı"}
     else:
         raise HTTPException(status_code=401, detail="Hatalı E-posta veya Şifre")
 
-# --- 2. CHATBOT ---
 @app.post("/chat")
 def chat(req: ChatRequest):
     try:
-        # Mesajı Kaydet
-        conn = sqlite3.connect("chatbot.db")
+        conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute("INSERT INTO chat_history (role, message) VALUES (?, ?)", ("user", req.message))
+        ph = get_placeholder()
+        
+        # Kullanıcı mesajını kaydet
+        cursor.execute(f"INSERT INTO chat_history (role, message) VALUES ({ph}, {ph})", ("user", req.message))
         conn.commit()
 
         # AI Cevabı
         if api_key:
-            system_instruction = f"""
-            Sen Start ERA platformunun asistanısın.
-            Model: Gemini 2.5 Flash.
-            Dil: {req.language}.
-            Görevin: Kullanıcıya girişimcilik, iş planları ve yazılım konusunda hızlı ve akıllı destek olmak.
-            Soru: {req.message}
-            """
+            system_instruction = f"Sen Start ERA asistanısın. Dil: {req.language}. Soru: {req.message}"
             response = model.generate_content(system_instruction)
             reply = response.text
         else:
-            reply = "API Anahtarı eksik! Lütfen .env dosyasına ekleyin."
+            reply = "API Anahtarı eksik!"
 
-        # Cevabı Kaydet
-        cursor.execute("INSERT INTO chat_history (role, message) VALUES (?, ?)", ("bot", reply))
+        # Bot cevabını kaydet
+        cursor.execute(f"INSERT INTO chat_history (role, message) VALUES ({ph}, {ph})", ("bot", reply))
         conn.commit()
         conn.close()
+        
         return {"reply": reply}
     except Exception as e:
         print(f"Chat Hatası: {e}")
@@ -145,51 +197,45 @@ def chat(req: ChatRequest):
 
 @app.get("/chat/history")
 def history():
-    conn = sqlite3.connect("chatbot.db")
+    conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("SELECT role, message FROM chat_history ORDER BY id ASC")
     rows = cursor.fetchall()
     conn.close()
-    return [{"text": msg, "isBot": (role == "bot")} for role, msg in rows]
+    
+    # Veri formatını ayarla
+    history_data = []
+    for row in rows:
+        # Row veya Dict erişimi
+        role = row['role'] if isinstance(row, dict) or hasattr(row, '__getitem__') else row[0]
+        msg = row['message'] if isinstance(row, dict) or hasattr(row, '__getitem__') else row[1]
+        history_data.append({"text": msg, "isBot": (role == "bot")})
+        
+    return history_data
 
-# --- 3. PDF GENERATOR ---
 @app.post("/generate_plan")
 def generate_plan(req: BusinessPlanRequest):
     try:
-        if not api_key:
-            raise HTTPException(status_code=500, detail="API Key eksik")
-            
-        prompt = f"""
-        Aşağıdaki iş fikri için profesyonel bir iş planı hazırla.
-        Dil: {req.language}.
-        İş Fikri: {req.business_idea}.
-        Lütfen başlıkları ve maddeleri net bir şekilde ayır.
-        """
+        prompt = f"İş planı hazırla: {req.business_idea}. Dil: {req.language}"
         response = model.generate_content(prompt)
-        text_content = response.text.replace("*", "").replace("#", "")
+        text_content = response.text.replace("*", "")
         
         pdf_filename = "StartERA_Plan.pdf"
-        document = SimpleDocTemplate(pdf_filename, pagesize=letter)
+        doc = SimpleDocTemplate(pdf_filename, pagesize=letter)
         styles = getSampleStyleSheet()
-        story = []
+        story = [Paragraph("Start ERA Plan", styles["Title"]), Spacer(1, 12)]
         
-        # Başlık
-        story.append(Paragraph(f"Start ERA - İş Planı", styles["Title"]))
-        story.append(Spacer(1, 12))
-        
-        # İçerik
         for line in text_content.split('\n'):
             if line.strip():
                 story.append(Paragraph(line, styles["Normal"]))
                 story.append(Spacer(1, 6))
-
-        document.build(story)
         
-        return FileResponse(pdf_filename, media_type='application/pdf', filename="StartERA_Plan.pdf")
+        doc.build(story)
+        return FileResponse(pdf_filename, filename="StartERA_Plan.pdf")
     except Exception as e:
-        print(f"PDF Hatası: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    port = int(os.environ.get("PORT", 10000))
+    uvicorn.run(app, host="0.0.0.0", port=port)
