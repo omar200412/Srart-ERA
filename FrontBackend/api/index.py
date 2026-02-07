@@ -37,7 +37,7 @@ except Exception as e:
     model = None
 
 # -------------------- APP --------------------
-# docs_url=None yaparak Vercel'de route çakışmalarını önleriz
+# Vercel'de docs rotaları çakışma yapmasın diye kapatıyoruz veya farklı yola alıyoruz
 app = FastAPI(docs_url="/api/docs", openapi_url="/api/openapi.json")
 
 app.add_middleware(
@@ -49,15 +49,15 @@ app.add_middleware(
 
 # -------------------- DB --------------------
 def get_db():
-    # 1. Öncelik: Postgres (Kalıcı Veri)
+    # Vercel'de kalıcı veri için Postgres önerilir
     if DATABASE_URL:
         try:
             return psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
         except:
             pass
     
-    # 2. Öncelik: SQLite (Geçici Veri - Vercel /tmp klasörü)
-    # Vercel'de sadece /tmp klasörüne yazma izni vardır.
+    # SQLite kullanıyorsak Vercel'de SADECE /tmp klasörüne yazabiliriz
+    # UYARI: /tmp klasörü her deployda sıfırlanır!
     db_path = "/tmp/chatbot.db"
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
@@ -108,7 +108,7 @@ def init_db():
     except Exception as e:
         print(f"DB Init Error: {e}")
 
-# Uygulama her başladığında DB'yi kontrol et
+# Uygulama başlarken DB'yi hazırla
 init_db()
 
 # -------------------- MODELS --------------------
@@ -132,10 +132,6 @@ class PDFRequest(BaseModel):
     text: str
 
 # -------------------- ROUTES --------------------
-
-# ÖNEMLİ: Tüm route'lar '/api' ön eki ile başlamalıdır veya 
-# next.config.ts içindeki rewrite kuralı bunları yakalamalıdır.
-# Aşağıdaki yapı next.config.ts rewrite kuralına güvenerek yazılmıştır.
 
 @app.get("/api/health")
 def health():

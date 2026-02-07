@@ -1,32 +1,37 @@
 import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
-  // Hata mesajına istinaden experimental içinden buraya taşındı
-  typedRoutes: false,
-
-  // Next.js 16 varsayılan olarak Turbopack kullanıyor.
-  // Webpack config ile çakışma uyarısını engellemek için boş obje ekliyoruz.
-  turbopack: {},
-
-  // Bellek kullanımını optimize etmek için bazı özellikleri kapatıyoruz
-  experimental: {
-    // Turbopack bellek sorunları yaratıyorsa SWC transformlarını optimize et
-    forceSwcTransforms: false,
-  },
-  
-  // Derleme sırasında bellek hatalarını önlemek için tip kontrolünü ve linting'i build sırasında atla
+  // TypeScript ve ESLint hatalarını build sırasında yoksay (Hızlı deploy için)
   typescript: {
     ignoreBuildErrors: true,
   },
+  
+  // Rota ve bellek optimizasyonları
+  typedRoutes: false,
+  experimental: {
+    forceSwcTransforms: false,
+  },
+  
+  // Turbopack boş obje (Hata önlemek için)
+  turbopack: {},
 
-  // 'eslint' bloğu kaldırıldı çünkü Next.js yapılandırmasında artık desteklenmiyor.
-
-  // Webpack önbelleğini optimize ederek RAM kullanımını düşürüyoruz
+  // Webpack önbellek ayarı - Type hatalarını önlemek için 'any' kullanıldı
   webpack: (config: any, { isServer }: { isServer: boolean }) => {
     if (!isServer) {
       config.cache = false;
     }
     return config;
+  },
+
+  // 👇 KRİTİK KISIM: API Yönlendirmesi
+  // Frontend'den gelen /api/login gibi istekleri api/index.py'ye gönderir.
+  rewrites: async () => {
+    return [
+      {
+        source: "/api/:path*",
+        destination: "/api/:path*",
+      },
+    ];
   },
 };
 
