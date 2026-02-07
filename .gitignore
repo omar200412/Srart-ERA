@@ -1,36 +1,82 @@
-# --- GÜVENLİK VE VERİTABANI ---
-.env
-*.db
-chatbot.db
-users.db
-sql_app.db
-.env.local
+--- BAĞIMLILIKLAR (Node.js & Python) ---
 
-# --- PYTHON / BACKEND (Senin yapına göre) ---
+node_modules/
+*/node_modules/
 venv/
-Include/
-Lib/
-Scripts/
-pyvenv.cfg
-__pycache__/
+*/venv/
+.venv/
+*/.venv/
+env/
+*/env/
+
+--- NEXT.JS / VERCEL ---
+
+.next/
+*/.next/
+out/
+*/out/
+.vercel/
+*/.vercel/
+build/
+dist/
+.docusaurus/
+
+--- PYTHON DERLEME DOSYALARI ---
+
+pycache/
+*/pycache/
 *.py[cod]
 *$py.class
+*.so
 .pytest_cache/
-model_kontrol.py
+.coverage
+htmlcov/
 
-# --- NEXT.JS / FRONTEND (is-plani-frontend klasörü için) ---
-is-plani-frontend/.next/
-is-plani-frontend/node_modules/
-is-plani-frontend/out/
-is-plani-frontend/.vercel
-node_modules/
+--- ÇEVRESEL DEĞİŞKENLER (Kritik Güvenlik) ---
 
-# --- ÜRETİLEN PDF DOSYALARI ---
+.env
+*/.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.env
+.env.
+
+--- VERİTABANI VE LOGLAR ---
+
+*.db
+.sqlite
+.sqlite3
+chatbot.db
+users.db
+.log
+npm-debug.log
+yarn-debug.log
+yarn-error.log
+
+--- GENERATED FILES (PDF, PKL vb.) ---
+
 pdfs/
 *.pdf
 StartERA_Plan.pdf
-
-# --- SİSTEM DOSYALARI ---
-.DS_Store
-Thumbs.db
 *.pkl
+*.pkl.json
+
+--- İŞLETİM SİSTEMİ ---
+
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+
+--- EDİTÖR AYARLARI ---
+
+.vscode/
+.idea/
+*.swp
+*.swo
