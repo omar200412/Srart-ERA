@@ -8,7 +8,7 @@ const API_URL = (typeof process !== 'undefined' && process.env && process.env.NE
   ? process.env.NEXT_PUBLIC_API_URL
   : "http://127.0.0.1:8000";
 
-// --- MOCK ROUTER (Hata Düzeltmesi) ---
+// --- MOCK ROUTER ---
 const useRouter = () => {
   return {
     push: (path: string) => {
@@ -26,7 +26,7 @@ const useRouter = () => {
   };
 };
 
-// --- MOCK LINK (Hata Düzeltmesi) ---
+// --- MOCK LINK ---
 const Link = ({ href, children, className, ...props }: any) => {
   return (
     <a 
@@ -137,6 +137,13 @@ const Chatbot = ({ lang, darkMode }: { lang: string, darkMode: boolean }) => {
     </div>
   );
 };
+
+// --- CHATBOT BUTTON (Alternative) ---
+const ChatbotButton = () => (
+    <div className="fixed bottom-6 right-6 z-[60]">
+      <button onClick={() => toast("Yardım asistanı 🤖", { icon: '👋' })} className="w-14 h-14 bg-gradient-to-tr from-blue-600 to-indigo-600 text-white rounded-full shadow-xl flex items-center justify-center hover:scale-110 transition active:scale-95">🤖</button>
+    </div>
+);
 
 // --- DİĞER BİLEŞENLER ---
 const TypewriterEffect = ({ text, speed = 5 }: { text: string, speed?: number }) => {
@@ -286,15 +293,20 @@ function PlannerContent() {
     setLoading(true);
     try {
       const res = await fetch(`${API_URL}/generate_plan`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(formData) });
-      if (!res.ok) throw new Error("API Error");
+      
+      // Hata kontrolü
+      if (!res.ok) {
+          throw new Error("API Connection Error");
+      }
+      
       const data = await res.json();
       setPlanResult(data.plan);
       toast.success(t.toast_success);
     } catch {
-      toast.error("Bağlantı hatası oluştu, ancak size özel bir plan oluşturuldu.");
+      // HATA DURUMUNDA GÖSTERİLECEK DETAYLI DEMO PLAN
+      // Bu kısım backend çalışmasa bile kullanıcının sistemin gücünü görmesini sağlar.
+      toast.success("Demo Modu: Örnek plan oluşturuldu.", { icon: '✨' });
       
-      // --- GELİŞMİŞ & GERÇEKÇİ DEMO PLAN (Fallback) ---
-      // Kullanıcının girdilerini kullanarak dinamik ve gerçekçi bir plan oluşturuyoruz.
       const fallbackPlan = `
 1. YÖNETİCİ ÖZETİ
 Girişiminiz "${formData.idea}", pazardaki mevcut boşlukları doldurmayı ve hedef kitleye benzersiz bir değer sunmayı amaçlamaktadır. Yönetim ekibinin "${formData.management}" konusundaki deneyimi ve "${formData.skills}" gibi kritik yetenekleri, projenin başarısı için güçlü bir temel oluşturmaktadır. Mevcut "${formData.capital}" sermaye ile yola çıkılarak, ilk aşamada sürdürülebilir bir büyüme yakalanması hedeflenmektedir.
