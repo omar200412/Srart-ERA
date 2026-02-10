@@ -16,7 +16,6 @@ from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 from dotenv import load_dotenv
 
-# ReportLab imports
 from reportlab.lib.pagesizes import A4
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -27,10 +26,10 @@ load_dotenv()
 
 # --- ORTAM DEĞİŞKENLERİ ---
 API_KEY = os.getenv("GOOGLE_API_KEY")
-# Vercel Postgres veya Neon/Supabase URL'i
-DATABASE_URL = os.getenv("DATABASE_URL") or os.getenv("POSTGRES_URL")
+# Vercel Postgres URL'ini otomatik alır
+DATABASE_URL = os.getenv("POSTGRES_URL") or os.getenv("DATABASE_URL")
 
-MAIL_SERVER = os.getenv("MAIL_SERVER", "smtp.gmail.com")
+MAIL_SERVER = os.getenv("MAIL_SERVER", "mail.plan-iq.net")
 MAIL_PORT = int(os.getenv("MAIL_PORT", 587))
 MAIL_USERNAME = os.getenv("MAIL_USERNAME")
 MAIL_PASSWORD = os.getenv("MAIL_PASSWORD")
@@ -63,7 +62,7 @@ def get_db_connection():
     # 1. Postgres (Canlı Ortam - Kalıcı)
     if DATABASE_URL:
         try:
-            # sslmode='require' bulut veritabanları için gereklidir
+            # sslmode='require' Vercel için gereklidir
             conn = psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor, sslmode='require')
             return conn, "postgres"
         except Exception as e:
@@ -251,7 +250,7 @@ def verify(req: VerifyRequest):
         if not row:
              raise HTTPException(404, "Kullanıcı bulunamadı.")
              
-        # Postgres dict döner (RealDictCursor), SQLite tuple döner
+        # Postgres dict döner, SQLite tuple döner
         if db_type == "postgres":
              stored_code = row['verification_code']
         else:
