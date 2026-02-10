@@ -13,36 +13,43 @@ const getApiUrl = () => {
 };
 const API_URL = getApiUrl();
 
-// --- MOCK ROUTER ---
+// --- MOCK ROUTER (AKILLI YÖNLENDİRME) ---
 const useRouter = () => {
   return {
     push: (path: string) => {
-      console.log(`Navigating to: ${path}`);
       if (typeof window !== 'undefined') {
-         if (path.startsWith('http')) {
-             window.location.href = path; 
+         // Önizleme ortamı kontrolü (googleusercontent veya blob)
+         const isPreview = window.location.hostname.includes('googleusercontent') || window.location.protocol === 'blob:';
+         
+         if (isPreview) {
+             console.log(`[Preview] Navigating to: ${path}`);
+             if (path === "/login") toast("Giriş yapmanız gerekiyor (Demo)", { icon: '🔒' });
+             else if (path === "/dashboard") toast("Dashboard'a yönlendiriliyor... (Demo)", { icon: '🏠' });
          } else {
-             if (path === "/login") {
-                 console.warn("Demo: Giriş sayfasına yönlendirme simüle edildi.");
-             }
+             // GERÇEK ORTAM (Localhost / Vercel) -> Yönlendir
+             window.location.href = path;
          }
       }
     }
   };
 };
 
-// --- MOCK LINK ---
+// --- MOCK LINK (AKILLI LINK) ---
 const Link = ({ href, children, className, ...props }: any) => {
   return (
     <a 
       href={href} 
       className={className} 
       onClick={(e) => {
-        e.preventDefault();
-        console.log("Link clicked:", href);
-        if (href === "/dashboard") {
-             toast("Dashboard'a dönülüyor...", { icon: '🏠' });
+        const isPreview = window.location.hostname.includes('googleusercontent') || window.location.protocol === 'blob:';
+        
+        if (isPreview) {
+            // Sadece önizleme ortamında yönlendirmeyi engelle
+            e.preventDefault();
+            console.log("Link clicked (Demo):", href);
+            if (href === "/dashboard") toast("Dashboard'a dönülüyor... (Demo)", { icon: '🏠' });
         }
+        // Gerçek ortamda hiçbir şey yapma, bırak <a> etiketi çalışsın
       }}
       {...props}
     >
@@ -143,7 +150,7 @@ const Chatbot = ({ lang, darkMode }: { lang: string, darkMode: boolean }) => {
   );
 };
 
-// --- CHATBOT BUTTON (Alternative) ---
+// --- CHATBOT BUTTON ---
 const ChatbotButton = () => (
     <div className="fixed bottom-6 right-6 z-[60]">
       <button onClick={() => toast("Yardım asistanı 🤖", { icon: '👋' })} className="w-14 h-14 bg-gradient-to-tr from-blue-600 to-indigo-600 text-white rounded-full shadow-xl flex items-center justify-center hover:scale-110 transition active:scale-95">🤖</button>
@@ -298,7 +305,12 @@ function PlannerContent() {
     setLoading(true);
     try {
       const res = await fetch(`${API_URL}/generate_plan`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(formData) });
-      if (!res.ok) throw new Error("API Connection Error");
+      
+      // Hata kontrolü
+      if (!res.ok) {
+          throw new Error("API Connection Error");
+      }
+      
       const data = await res.json();
       setPlanResult(data.plan);
       toast.success(t.toast_success);
