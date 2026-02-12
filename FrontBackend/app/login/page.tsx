@@ -1,10 +1,9 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation'; // Yönlendirme için aktif edildi
 
 // ==========================================
-// İKONLAR (lucide-react paketi yerine yerel SVG olarak eklendi - Build Hatası Çözümü)
+// İKONLAR (Harici paket olmadan yerel SVG tanımları)
 // ==========================================
 const IconMail = ({ className }: { className?: string }) => (
   <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
@@ -29,8 +28,6 @@ const IconMoon = ({ className }: { className?: string }) => (
 );
 
 export default function LoginPage() {
-  const router = useRouter(); // Yönlendirme objesi aktif edildi
-
   // --- TEMA (DARK/LIGHT) STATE'İ ---
   const [isDarkMode, setIsDarkMode] = useState<boolean>(false);
   const [mounted, setMounted] = useState(false); // Next.js Hydration hatasını önlemek için
@@ -44,7 +41,20 @@ export default function LoginPage() {
   const [error, setError] = useState<string>('');
   const [successMsg, setSuccessMsg] = useState<string>('');
 
-  // SİSTEMİN/ÖNCEKİ SAYFANIN TEMASINI KONTROL ET
+  // 1. OTURUM KONTROLÜ (Sayfa Yüklendiğinde)
+  useEffect(() => {
+    // Tarayıcı hafızasını kontrol et
+    const isLoggedIn = localStorage.getItem('isLoggedIn');
+    const savedUserEmail = localStorage.getItem('userEmail');
+
+    if (isLoggedIn === 'true') {
+      // Eğer kullanıcı zaten giriş yapmışsa, login ekranını göstermeden yönlendir
+      // alert(`Zaten ${savedUserEmail} olarak giriş yaptınız. Yönlendiriliyorsunuz...`); // (İsteğe bağlı uyarı)
+      window.location.href = '/dashboard'; 
+    }
+  }, []);
+
+  // 2. TEMA KONTROLÜ
   useEffect(() => {
     setMounted(true);
     const savedTheme = localStorage.getItem('theme');
@@ -56,7 +66,6 @@ export default function LoginPage() {
       setIsDarkMode(false);
       document.documentElement.classList.remove('dark');
     } else {
-      // Eğer localStorage'da kayıt yoksa sistemin tercihine bak
       const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
       setIsDarkMode(prefersDark);
       if (prefersDark) document.documentElement.classList.add('dark');
@@ -75,7 +84,7 @@ export default function LoginPage() {
     }
   };
 
-  // 1. GİRİŞ YAPMA İŞLEMİ
+  // 3. GİRİŞ YAPMA İŞLEMİ
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -89,11 +98,18 @@ export default function LoginPage() {
       // -- AŞAĞISI SİMÜLASYONDUR (Gerçek API'niz olana kadar test etmeniz için) --
       await new Promise(resolve => setTimeout(resolve, 1000)); // 1 saniye bekle
       
-      // Eğer kullanıcı adı/şifre doğruysa:
-      setSuccessMsg('Giriş başarılı! Yönlendiriliyorsunuz...');
+      // Giriş Başarılı Olduğunda:
+      setSuccessMsg('Giriş başarılı! Oturum kaydediliyor ve yönlendiriliyorsunuz...');
       
-      // Başarılı girişten sonra yönlendirme yapılıyor:
-      router.push('/dashboard'); 
+      // [YENİ] OTURUMU KAYDET
+      localStorage.setItem('isLoggedIn', 'true'); // Kullanıcının giriş yaptığını işaretle
+      localStorage.setItem('userEmail', email);   // Kullanıcı emailini kaydet (isteğe bağlı)
+
+      // Yönlendir
+      // window.location.href, Next.js router'ına göre biraz daha 'hard' refresh yapar ama en garantisidir.
+      setTimeout(() => {
+        window.location.href = '/dashboard'; 
+      }, 500); // Kullanıcı başarı mesajını görsün diye yarım saniye bekle
 
     } catch (err: any) {
       setError(err.response?.data?.message || 'Giriş yapılırken bir hata oluştu.');
@@ -102,19 +118,20 @@ export default function LoginPage() {
     }
   };
 
+  // Eğer sayfa henüz mount olmadıysa (Next.js SSR hatası önlemek için) boş döndür
+  if (!mounted) return null;
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex flex-col justify-center py-12 sm:px-6 lg:px-8 font-sans transition-colors duration-200 relative">
       
       {/* TEMA DEĞİŞTİRME BUTONU */}
-      {mounted && (
-        <button 
-          onClick={toggleTheme}
-          className="absolute top-4 right-4 p-2 rounded-full bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white shadow-sm border border-gray-200 dark:border-gray-700 transition-colors"
-          title={isDarkMode ? 'Açık Temaya Geç' : 'Koyu Temaya Geç'}
-        >
-          {isDarkMode ? <IconSun className="w-5 h-5" /> : <IconMoon className="w-5 h-5" />}
-        </button>
-      )}
+      <button 
+        onClick={toggleTheme}
+        className="absolute top-4 right-4 p-2 rounded-full bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white shadow-sm border border-gray-200 dark:border-gray-700 transition-colors"
+        title={isDarkMode ? 'Açık Temaya Geç' : 'Koyu Temaya Geç'}
+      >
+        {isDarkMode ? <IconSun className="w-5 h-5" /> : <IconMoon className="w-5 h-5" />}
+      </button>
 
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         <div className="flex justify-center">
